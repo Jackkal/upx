@@ -4018,25 +4018,34 @@ unsigned PackLinuxElf32::find_LOAD_gap(
     unsigned const nph
 )
 {
+    printf("Start PackLinuxElf32::find_LOAD_gap()\n");
     if (!is_LOAD32(&phdr[k])) {
+        printf("find_LOAD_GAP(): phdr[%d] is not of PT_LOAD type\n",k);
         return 0;
     }
+
+    printf("find_LOAD_GAP(): phdr[%d] is PT_LOAD type\n",k);
     unsigned const hi = get_te32(&phdr[k].p_offset) +
                         get_te32(&phdr[k].p_filesz);
     unsigned lo = ph.u_file_size;
+    printf("find_LOAD_gap: hi (offset+segmentsize) = %u, lo (ph.u_file_size)= %u\n", hi, lo);
     if (lo < hi)
         throwCantPack("bad input: PT_LOAD beyond end-of-file");
     unsigned j = k;
     for (;;) { // circular search, optimize for adjacent ascending
         ++j;
+        printf("find_LOAD_gap: circular search: phdr[%d]\n",j);
         if (nph==j) {
+            printf("find_LOAD_gap: Last PT_LOAD, rolling over.\n");
             j = 0;
         }
         if (k==j) {
             break;
         }
         if (is_LOAD32(&phdr[j])) {
+            printf("find_LOAD_gap: circular search: phdr[%d] is PT_LOAD\n",j);
             unsigned const t = get_te32(&phdr[j].p_offset);
+            printf("find_LOAD_gap: circular search: phdr[%d] offset: %u\n",j, t);
             if ((t - hi) < (lo - hi)) {
                 lo = t;
                 if (hi==lo) {
@@ -4790,6 +4799,7 @@ void PackLinuxElf64::un_DT_INIT(
 
 void PackLinuxElf64::unpack(OutputFile *fo)
 {
+    printf("Start PackLinuxElf64::unpack");
     if (e_phoff != sizeof(Elf64_Ehdr)) {// Phdrs not contiguous with Ehdr
         throwCantUnpack("bad e_phoff");
     }
@@ -5722,6 +5732,7 @@ Elf64_Sym const *PackLinuxElf64::elf_lookup(char const *name) const
 
 void PackLinuxElf32::unpack(OutputFile *fo)
 {
+    printf("Start PackLinuxElf32::unpack\n");
     if (e_phoff != sizeof(Elf32_Ehdr)) {// Phdrs not contiguous with Ehdr
         throwCantUnpack("bad e_phoff");
     }
@@ -5739,6 +5750,8 @@ void PackLinuxElf32::unpack(OutputFile *fo)
             szb_info = 2*sizeof(unsigned);
         }
     }
+
+    printf("unpack: overlay_offset: %x\n", overlay_offset);
 
     fi->seek(overlay_offset - sizeof(l_info), SEEK_SET);
     fi->readx(&linfo, sizeof(linfo));
@@ -5769,10 +5782,14 @@ void PackLinuxElf32::unpack(OutputFile *fo)
 
     // Uncompress Ehdr and Phdrs.
     if (ibuf.getSize() < ph.c_len) {
+        printf("unpack: Error: ibuf.getSize() < ph.c_len\n");
         throwCompressedDataViolation();
     }
+    printf("unpack: reading compressed Ehdr and Phdrs from file\n");
     fi->readx(ibuf, ph.c_len);
+    printf("unpack: decompressing Ehdr and Phdrs\n");
     decompress(ibuf, (upx_byte *)ehdr, false);
+    printf("unpack: Ehdr and Phdrs decompressed\n");
     if (ehdr->e_type   !=ehdri.e_type
     ||  ehdr->e_machine!=ehdri.e_machine
     ||  ehdr->e_version!=ehdri.e_version
@@ -5800,6 +5817,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
     Elf32_Phdr const *const dynhdr = elf_find_ptype(Elf32_Phdr::PT_DYNAMIC, phdri, c_phnum);
     bool const is_shlib = !!dynhdr;
     if (is_shlib) {
+        printf("unpack: is_shlib\n");
         // Unpack and output the Ehdr and Phdrs for real.
         // This depends on position within input file fi.
         unpackExtent(ph.u_len, fo,
@@ -5877,10 +5895,13 @@ void PackLinuxElf32::unpack(OutputFile *fo)
     }
     else {  // main executable
         // Decompress each PT_LOAD.
+        printf("unpack: Decompress each PT_LOAD. u_phnum = %d\n",u_phnum);
         bool first_PF_X = true;
         phdr = (Elf32_Phdr *) (void *) (1+ ehdr);  // uncompressed
         for (unsigned j=0; j < u_phnum; ++phdr, ++j) {
+            printf("unpack: PT_X %d\n", j);
             if (is_LOAD32(phdr)) {
+                printf("unpack: PT_LOAD found\n");
                 unsigned const filesz = get_te32(&phdr->p_filesz);
                 unsigned const offset = get_te32(&phdr->p_offset);
                 if (fo)
@@ -5905,10 +5926,17 @@ void PackLinuxElf32::unpack(OutputFile *fo)
             break;
         }
     }
+
+    //Hacky return for packed files where PT_LOAD gaps and packheader have been removed.
+    printf("Unpack:hacky return");
+    return;
+
+    printf("file_size %u\n", (unsigned) file_size);
     if (0x1000==get_te32(&phdri[0].p_filesz)  // detect C_BASE style
     &&  0==get_te32(&phdri[1].p_offset)
     &&  0==get_te32(&phdri[0].p_offset)
     &&     get_te32(&phdri[1].p_filesz) == get_te32(&phdri[1].p_memsz)) {
+        printf("unpack: Skip past loader C_BASE style\n");
         fi->seek(up4(get_te32(&phdr[1].p_memsz)), SEEK_SET);  // past the loader
     }
     else if (is_shlib
@@ -5916,6 +5944,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
                 ph.getPackHeaderSize() + sizeof(overlay_offset))
             < up4(file_size)) {
         // Loader is not at end; skip past it.
+        printf("unpack: Loader is not at end; skip past it\n");
         funpad4(fi);  // MATCH01
         unsigned d_info[4]; fi->readx(d_info, sizeof(d_info));
         if (0==old_dtinit) {
@@ -5926,6 +5955,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
     }
 
     // The gaps between PT_LOAD and after last PT_LOAD
+    printf("unpack: Process gaps between PT_LOAD and after last PT_LOAD\n");
     phdr = (Elf32_Phdr *)&u[sizeof(*ehdr)];
     unsigned hi_offset(0);
     for (unsigned j = 0; j < u_phnum; ++j) {
@@ -5936,6 +5966,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
     }
     for (unsigned j = 0; j < u_phnum; ++j) {
         unsigned const size = find_LOAD_gap(phdr, j, u_phnum);
+        printf("unpack: Gap for Program header %d: gap size = %u\n",j,size);
         if (size) {
             unsigned const offset = get_te32(&phdr[j].p_offset);
             unsigned const where =  get_te32(&phdr[j].p_filesz) + offset;
@@ -5949,6 +5980,7 @@ void PackLinuxElf32::unpack(OutputFile *fo)
     }
 
     // check for end-of-file
+    printf("unpack: check for end-of-file\n");
     fi->readx(&bhdr, szb_info);
     unsigned const sz_unc = ph.u_len = get_te32(&bhdr.sz_unc);
 

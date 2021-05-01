@@ -44,14 +44,14 @@ PackHeader::PackHeader() : version(-1), format(-1) {}
 static unsigned char get_packheader_checksum(const upx_bytep buf, int len) {
     assert(len >= 4);
     assert(get_le32(buf) == UPX_MAGIC_LE32);
-    // printf("1 %d\n", len);
+    printf("1 packheader checksum len %d\n", len);
     buf += 4;
     len -= 4;
     unsigned c = 0;
     while (len-- > 0)
         c += *buf++;
     c %= 251;
-    // printf("2 %d\n", c);
+    printf("2 packheader checksum 0x%x\n", (unsigned char) c);
     return (unsigned char) c;
 }
 

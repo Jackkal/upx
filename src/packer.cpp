@@ -325,6 +325,7 @@ void ph_decompress(PackHeader &ph, const upx_bytep in, upx_bytep out, bool verif
                    Filter *ft) {
     unsigned adler;
 
+    printf("Start ph_decompress().\n");
     // verify checksum of compressed data
     if (verify_checksum) {
         adler = upx_adler32(in, ph.c_len, ph.saved_c_adler);
@@ -332,6 +333,9 @@ void ph_decompress(PackHeader &ph, const upx_bytep in, upx_bytep out, bool verif
             throwChecksumError();
     }
 
+    printf("ph_decompress: ph.u_len: %x\n",ph.u_len);
+    printf("ph_decompress: ph.c_len: %x\n",ph.c_len);
+    printf("ph_decompress: ph.method: %x\n",ph.method);
     // decompress
     if (ph.u_len < ph.c_len) {
         throwCantUnpack("header corrupted");

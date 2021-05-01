@@ -452,21 +452,28 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
     bool first_PF_X, unsigned szb_info, bool is_rewrite
 )
 {
+    printf("Start PackUnix::unpackExtent(). wanted = %u\n",wanted);
     b_info hdr; memset(&hdr, 0, sizeof(hdr));
     while (wanted) {
         fi->readx(&hdr, szb_info);
         int const sz_unc = ph.u_len = get_te32(&hdr.sz_unc);
         int const sz_cpr = ph.c_len = get_te32(&hdr.sz_cpr);
         ph.filter_cto = hdr.b_cto8;
+        printf("unpackExtent: sz_unc = %d, sz_cpr = %d, ph.filter_cto = %d\n",sz_unc, sz_cpr, ph.filter_cto );
 
         if (sz_unc == 0) { // must never happen while 0!=wanted
+            printf("unpackExtent: Error: must never happen while 0!=wanted\n");
             throwCantUnpack("corrupt b_info");
             break;
         }
-        if (sz_unc <= 0 || sz_cpr <= 0)
+        if (sz_unc <= 0 || sz_cpr <= 0) {
+            printf("unpackExtent: Error: sz_unc <= 0 || sz_cpr <= 0\n");
             throwCantUnpack("corrupt b_info");
-        if (sz_cpr > sz_unc || sz_unc > (int)blocksize)
+        }
+        if (sz_cpr > sz_unc || sz_unc > (int)blocksize) {
+            printf("unpackExtent: Error: sz_cpr > sz_unc || sz_unc > (int)blocksize\n");
             throwCantUnpack("corrupt b_info");
+        }
 
         int j = blocksize + OVERHEAD - sz_cpr;
         fi->readx(ibuf+j, sz_cpr);
@@ -479,11 +486,14 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
             decompress(ibuf+j, ibuf, false);
             if (12==szb_info) { // modern per-block filter
                 if (hdr.b_ftid) {
+                    printf("unpackExtent:filter id (hex): %x\n", hdr.b_ftid);
                     Filter ft(ph.level);  // FIXME: ph.level for b_info?
                     ft.init(hdr.b_ftid, 0);
                     ft.cto = hdr.b_cto8;
                     ft.unfilter(ibuf, sz_unc);
-                }
+                } else
+                    printf("unpackExtent:No filter\n");
+
             }
             else { // ancient per-file filter
                 if (first_PF_X) { // Elf32_Ehdr is never filtered
@@ -510,8 +520,10 @@ void PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
                 total_out += sz_unc;
             }
         }
-        if (wanted < (unsigned)sz_unc)
+        if (wanted < (unsigned)sz_unc) {
+            printf("unpackExtent: Error: wanted < (unsigned)sz_unc\n");
             throwCantUnpack("corrupt b_info");
+        }
         wanted -= sz_unc;
     }
 }
